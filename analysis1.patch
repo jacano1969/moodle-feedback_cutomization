@@ -1,0 +1,234 @@
+--- analysis.php.old	2012-10-24 10:34:40.018367078 +0500
++++ analysis.php	2012-10-24 10:48:53.277389928 +0500
+@@ -1,6 +1,6 @@
+ <?php
+ 
+-/**
++/*
+  * shows an analysed view of feedback
+  *
+  * @copyright Andreas Grabs
+@@ -10,7 +10,8 @@
+ 
+ require_once("../../config.php");
+ require_once("lib.php");
+-
++include $CFG->dirroot."/lib/libchart/classes/libchart.php";
++session_start();
+ // $SESSION->feedback->current_tab = 'analysis';
+ $current_tab = 'analysis';
+ 
+@@ -70,9 +71,55 @@ $PAGE->set_heading(format_string($course
+ $PAGE->set_title(format_string($feedback->name));
+ echo $OUTPUT->header();
+ 
++//Added By Hina yousuf
++$context = get_context_instance(CONTEXT_COURSE, $course->id, MUST_EXIST);
++///Added By Hina Yousuf (Teachers can only see their own feedback)
++$roleid=$DB->get_record_sql("SELECT roleid
++                        FROM {role_assignments} ra
++                        WHERE ra.userid =$USER->id AND contextid =$context->id");
++
++if($roleid->roleid==3){
++        if(strstr($feedback->name, $USER->firstname ." ".$USER->lastname) ==true || strstr($feedback->name, "(") ==false){
++                $allowed=1;
++        }else{
++                $allowed=2;
++        }
++}
++if($roleid->roleid!=3){
++        $allowed=1;
++}
++
++//Added By Hina yousuf
++if( time()>$feedback->timeclose  && $allowed==1)
++{
++
+ /// print the tabs
+ include('tabs.php');
++//$context = get_context_instance(CONTEXT_COURSE, $course->id, MUST_EXIST);		
+ 
++$params['contextid'] =$context->id;
++$sql="SELECT *
++FROM {user} u
++JOIN {user_enrolments} ue ON ( ue.userid = u.id )
++WHERE u.id
++IN (
++
++SELECT ra.userid
++FROM {role_assignments} ra
++WHERE ra.roleid =3
++AND contextid =:contextid
++)
++GROUP BY u.id";
++$faculty=$DB->get_records_sql( $sql , $params);
++foreach($faculty as $fac){
++	if($facultyname!=""){
++		$facultyname.=" , ".$fac->firstname." ".$fac->lastname;
++	}
++	else{
++		$facultyname.=$fac->firstname." ".$fac->lastname;
++	}
++//$facultyname=$fac->firstname." ".$fac->lastname;
++}
+ 
+ //print analysed items
+ echo $OUTPUT->box_start('generalbox boxaligncenter boxwidthwide');
+@@ -81,7 +128,7 @@ echo $OUTPUT->box_start('generalbox boxa
+ $groupselect = groups_print_activity_menu($cm, $CFG->wwwroot . '/mod/feedback/analysis.php?id=' . $cm->id.'&do_show=analysis', true);
+ $mygroupid = groups_get_activity_group($cm);
+ 
+-if( has_capability('mod/feedback:viewreports', $context) ) {
++/*if( has_capability('mod/feedback:viewreports', $context) ) {
+ 
+     echo isset($groupselect) ? $groupselect : '';
+     echo '<div class="clearer"></div>';
+@@ -94,7 +141,33 @@ if( has_capability('mod/feedback:viewrep
+     echo $OUTPUT->single_button($aurl, get_string('export_to_excel', 'feedback'));
+     echo $OUTPUT->container_end();
+ }
++*/
++
++//Added By Hina Yousuf///print pdf format and show analysis after feedback is closed
++if( has_capability('mod/feedback:viewreports', $context) && time()>$feedback->timeclose) {
++
++    echo isset($groupselect) ? $groupselect : '';
++    echo '<div class="clearer"></div>';
++
++    //button "export to excel"
++    //echo '<div class="mdl-align">';
++    // echo '<div class="feedback_centered_button">';
++    echo $OUTPUT->container_start('form-buttons');
++    //$aurl = new moodle_url('analysis_to_excel.php', array('sesskey'=>sesskey(), 'id'=>$id));
++//    if($feedback->name=="First Student Feedback" || $feedback->name=="Second Student Feedback"){
++  if(strstr($feedback->name, "Student Feedback")){
++
++	    $aurl = new moodle_url('analysis_to_pdf.php', array('sesskey'=>sesskey(), 'id'=>$id));	   
++	    echo $OUTPUT->single_button($aurl, "Export to PDF");    
++    }
++    else{
++    	$aurl = new moodle_url('analysis_to_excel.php', array('sesskey'=>sesskey(), 'id'=>$id));	   
++	    echo $OUTPUT->single_button($aurl, get_string('export_to_excel', 'feedback')); 
++    }
++    echo $OUTPUT->container_end();
++}
+ 
++//end
+ //get completed feedbacks
+ $completedscount = feedback_get_completeds_group_count($feedback, $mygroupid);
+ 
+@@ -109,10 +182,15 @@ echo '<b>'.get_string('completed_feedbac
+ $items = $DB->get_records('feedback_item', array('feedback'=>$feedback->id, 'hasvalue'=>1), 'position');
+ //show the count
+ if(is_array($items)){
+-    echo '<b>'.get_string('questions', 'feedback').': ' .sizeof($items). ' </b><hr />';
++    echo '<b>'.get_string('questions', 'feedback').': ' .sizeof($items). ' </b>';
+ } else {
+     $items=array();
+ }
++ $faculty = explode("(", $feedback->name);
++$facultyname=rtrim($faculty[1],")");
++
++echo '<br/><b> Faculty:'.$facultyname."</b><br/>";
++echo '<b> Course:'.$course->fullname."</b><hr />";
+ $check_anonymously = true;
+ if($mygroupid > 0 AND $feedback->anonymous == FEEDBACK_ANONYMOUS_YES) {
+     if($completedscount < FEEDBACK_MIN_ANONYMOUS_COUNT_IN_GROUP) {
+@@ -123,6 +201,8 @@ if($mygroupid > 0 AND $feedback->anonymo
+ echo '<div><table width="80%" cellpadding="10"><tr><td>';
+ if($check_anonymously) {
+     $itemnr = 0;
++	$_SESSION['percntavg']=0;
++	$_SESSION['questions']=0;
+     //print the items in an analysed form
+     foreach($items as $item) {
+         if($item->hasvalue == 0) continue;
+@@ -137,15 +217,88 @@ if($check_anonymously) {
+         } else {
+             $printnr = '';
+         }
++        $_SESSION['count']=$_SESSION['count']+1;
+         $itemobj->print_analysed($item, $printnr, $mygroupid);
++	if($itemobj== new feedback_item_multichoicerated()){
++        	$itemobj->graph_item($item, $mygroupid, $courseid);
++        }
++        //$itemobj->graph_item($item, $mygroupid, $courseid);
+         // $itemnr = $itemobj->print_analysed($item, $itemnr, $mygroupid);
+         echo '</table>';
+     }
+ }else {
+     echo $OUTPUT->heading_with_help(get_string('insufficient_responses_for_this_group', 'feedback'), 'insufficient_responses', 'feedback');
+ }
++
++
++ 
++ 
++ 
++ $totalmarks=$_SESSION['questions']*5;       
++$percentavg=($_SESSION['percntavg']/$totalmarks)*100;
++
++$percentavg = number_format(($percentavg), 2);
++echo '<table>';
++echo '<tr><td align="left" ><b>'.get_string('totalmarks', 'feedback').': '.$totalmarks.'    </b></td></tr>';       
++switch ($percentavg) {
++    case  ($percentavg >= 80 || $percentavg <= 100 ):
++        $feedback ="Excellent";
++        break;
++    case  ($percentavg >= 60 || $percentavg < 80 ):
++        $feedback = "Above Average";
++        break;
++     case  ($percentavg >= 40 || $percentavg < 60 ):
++        $feedback = "High Average";
++        break;
++    case  ($percentavg >= 20 || $percentavg < 40 ):
++        $feedback = "Average";
++        break;
++    case  ($percentavg >= 0 || $percentavg < 20 ):
++        $feedback = "Poor";
++        break;
++}
++   echo '<tr><td align="left" ><b>'.get_string('Percentagemarks', 'feedback').': '.$percentavg.'</b>';
++          
++echo '</td></tr></table>';
++
++
++
++
++    $chart = new VerticalBarChart();
++
++    $dataSet = new XYDataSet();
++    for($i=0;$i<$_SESSION['datasize'];$i++)
++    {
++	 $dataSet->addPoint(new Point($_SESSION['text'][$i], $_SESSION[$i]));
++      
++
++    }
++   
++    $chart->setDataSet($dataSet);
++
++    $chart->setTitle("Graph");
++    $chart->render("generated/demo1.png");
++    echo '<img alt="" src="generated/demo1.png" style="border: 1px solid gray;"/>';
++  ////
++
++
++ //echo '</div>';
++ 
+ echo '</td></tr></table></div>';
+ echo $OUTPUT->box_end();
++}else if($allowed==2){
++	 $faculty = explode("(", $feedback->name);
++$facultyname=rtrim($faculty[1],")");
++
++        echo "<div align='center'><font size='2'><b>You do not have permission to view the feedback report of ".$facultyname.'</b></font></div>';
++
++
++}
++
++                else{
++
++                        echo "<div align='center'><font size='2'><b>You can view the report after feedback is closed i.e.".date(" M jS, Y", $feedback->timeclose).'</b></font></div>';
++                }
+ 
+ echo $OUTPUT->footer();
+ 

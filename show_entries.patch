@@ -1,0 +1,30 @@
+--- show_entries.php.old	2012-10-24 10:34:40.070367079 +0500
++++ show_entries.php	2012-10-24 10:34:40.069367079 +0500
+@@ -59,7 +59,10 @@ if(($formdata = data_submitted()) AND !c
+ 
+ require_capability('mod/feedback:viewreports', $context);
+ 
+-////////////////////////////////////////////////////////
++if(time()<$feedback->timeclose)
++{
++	print_error(' : You can view the report after '.date(" M jS, Y", $feedback->timeclose));
++}
+ //get the responses of given user
+ ////////////////////////////////////////////////////////
+ if($do_show == 'showoneentry') {
+@@ -88,7 +91,7 @@ include('tabs.php');
+ ////////////////////////////////////////////////////////
+ if($do_show == 'showentries'){
+     //print the link to analysis
+-    if(has_capability('mod/feedback:viewreports', $context)) {
++    if(has_capability('mod/feedback:viewreports', $context) && time()>$feedback->timeclose) {
+         //get the effective groupmode of this course and module
+         if (isset($cm->groupmode) && empty($course->groupmodeforce)) {
+             $groupmode =  $cm->groupmode;
+@@ -305,4 +308,4 @@ if($do_show == 'showoneentry') {
+ 
+ echo $OUTPUT->footer();
+ 
+-?>
+\ No newline at end of file
++?>

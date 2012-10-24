@@ -1,0 +1,15 @@
+--- feedback.php.old	2012-10-24 10:34:39.975367077 +0500
++++ feedback.php	2012-10-24 10:34:39.973367077 +0500
+@@ -22,7 +22,11 @@
+  * @copyright 1999 onwards Martin Dougiamas  {@link http://moodle.com}
+  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+  */
+-
++$string['totalmarks'] = 'Total Marks';
++$string['Percentagemarks'] = 'Percentage Marks';
++$string['score'] = 'Score';
++$string['Total_feedback'] = 'Total Feedbacks';
++$string['score'] = 'Score';
+ $string['add_item'] = 'Add question to activity';
+ $string['add_items'] = 'Add question to activity';
+ $string['add_pagebreak'] = 'Add a page break';
